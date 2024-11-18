@@ -34,7 +34,6 @@ class SignalingClient:
                 # Set remote description
                 offer = RTCSessionDescription(sdp=data["payload"]["sdp"]["sdp"], type="offer")
                 await self.pc.setRemoteDescription(offer)
-                self.pc.createDataChannel(label="mastapi")
                 # Add a recorder for incoming tracks
                 @self.pc.on("track")
                 async def on_track(track: MediaStreamTrack):
@@ -46,6 +45,8 @@ class SignalingClient:
 
                 # Create and send an answer
                 answer = await self.pc.createAnswer()
+
+                self.pc.createDataChannel(label="mastapi")
                 await self.pc.setLocalDescription(answer)
                 
                 answer_message = {
@@ -64,9 +65,11 @@ class SignalingClient:
                 await websocket.send(json.dumps(answer_message))
                 print("Sent answer message.")
 
-            elif data["type"] == "candidate":
+            elif data["type"] == "CANDIDATE":
                 print("Processing ICE candidate...")
-                candidate = data.get("candidate")
+
+                candidate = data["payload"]["candidate"]
+                print(candidate)
                 if candidate:
                     await self.pc.addIceCandidate(candidate)
 
