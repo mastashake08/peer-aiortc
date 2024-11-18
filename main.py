@@ -2,7 +2,7 @@ import asyncio
 import websockets
 import json
 import uuid
-from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
+from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, RTCIceCandidate
 from aiortc.contrib.media import MediaRecorder
 from datetime import datetime
 
@@ -21,14 +21,40 @@ class SignalingClient:
 
         # Initialize MediaRecorder with the timestamped filename
         self.recorder = MediaRecorder(self.output_file)
+    def candidate_from_sdp(self,cand) -> RTCIceCandidate:
+        #print('candidate recieved: ', cand)
+        sdp = cand['candidate']
+        bits = sdp.split()
+        assert len(bits) >= 8
 
+        candidate = RTCIceCandidate(
+            component=int(bits[1]),
+            foundation=bits[0],
+            ip=bits[4],
+            port=int(bits[5]),
+            priority=int(bits[3]),
+            protocol=bits[2],
+            type=bits[7],
+            sdpMid=cand['sdpMid'],
+            sdpMLineIndex=cand['sdpMLineIndex']
+        )
+
+        for i in range(8, len(bits) - 1, 2):
+            if bits[i] == "raddr":
+                candidate.relatedAddress = bits[i + 1]
+            elif bits[i] == "rport":
+                candidate.relatedPort = int(bits[i + 1])
+            elif bits[i] == "tcptype":
+                candidate.tcpType = bits[i + 1]
+        return candidate
+    
     async def handle_signaling(self, websocket):
         """
         Handle incoming signaling messages and process SDP/ICE candidates.
         """
         async for message in websocket:
             data = json.loads(message)
-            print(f"Received message: {data}")
+            #print(f"Received message: {data}")
             if data["type"] == "OFFER":
                 print("Processing offer...")
                 # Set remote description
@@ -57,9 +83,7 @@ class SignalingClient:
                         "sdp": {
                             "sdp:": self.pc.localDescription.sdp,
                             "type": "answer"
-                        },
-                        'type': 'media', 
-                        'connectionId': data["payload"]['connectionId']
+                        }
                     }
                 }
                 await websocket.send(json.dumps(answer_message))
@@ -67,12 +91,10 @@ class SignalingClient:
 
             elif data["type"] == "CANDIDATE":
                 print("Processing ICE candidate...")
-
-                candidate = data["payload"]["candidate"]
-                print(candidate)
+                
+                candidate = self.candidate_from_sdp(data["payload"]["candidate"])
                 if candidate:
-                    await self.pc.addIceCandidate(candidate)
-
+                  await  self.pc.addIceCandidate(candidate)
     async def connect(self):
         """
         Connect to the PeerJS server and handle signaling.
