@@ -17,7 +17,7 @@ class SignalingClient:
 
         # Create a timestamped output file name
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_file = f"{timestamp}.mp4"
+        self.output_file = f"./{timestamp}.mp4"
 
         # Initialize MediaRecorder with the timestamped filename
         self.recorder = MediaRecorder(self.output_file)
@@ -34,7 +34,7 @@ class SignalingClient:
                 # Set remote description
                 offer = RTCSessionDescription(sdp=data["payload"]["sdp"]["sdp"], type="offer")
                 await self.pc.setRemoteDescription(offer)
-
+                self.pc.createDataChannel(label="mastapi")
                 # Add a recorder for incoming tracks
                 @self.pc.on("track")
                 async def on_track(track: MediaStreamTrack):
@@ -56,10 +56,11 @@ class SignalingClient:
                         "sdp": {
                             "sdp:": self.pc.localDescription.sdp,
                             "type": "answer"
-                        }
+                        },
+                        'type': 'media', 
+                        'connectionId': data["payload"]['connectionId']
                     }
                 }
-                print(answer_message)
                 await websocket.send(json.dumps(answer_message))
                 print("Sent answer message.")
 
